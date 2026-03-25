@@ -1,0 +1,4 @@
+slam_toolbox:
+  ros__parameters:
+    minimum_laser_range: 0.1
+    maximum_laser_range: 8.0
