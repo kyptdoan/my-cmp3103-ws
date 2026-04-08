@@ -25,18 +25,18 @@ class StateMachineNode(Node):
         # subscribers - receive done/success/failure signals from other nodes
         self.create_subscription(Empty, '/estimate_pose/success', self.estimate_pose_success_callback, 1)
         self.create_subscription(Empty, '/estimate_pose/failure', self.estimate_pose_failure_callback, 1)
-        self.create_subscription(Empty, '/go_to_pose/done',       self.go_to_pose_done_callback,       1)
-        self.create_subscription(Empty, '/go_to_pose/failed',     self.go_to_pose_failed_callback,     1)
-        self.create_subscription(Empty, '/push_a_cube/done',      self.push_a_cube_done_callback,      1)
-        self.create_subscription(Empty, '/push_a_cube/failure',   self.push_a_cube_failure_callback,   1)
+        self.create_subscription(Empty, '/go_to_pose/done', self.go_to_pose_done_callback, 1)
+        self.create_subscription(Empty, '/go_to_pose/failed', self.go_to_pose_failed_callback, 1)
+        self.create_subscription(Empty, '/push_a_cube/done', self.push_a_cube_done_callback, 1)
+        self.create_subscription(Empty, '/push_a_cube/failure', self.push_a_cube_failure_callback, 1)
 
         # signal flags - set by callbacks, consumed by tick
         self.flag_estimate_pose_success = False
         self.flag_estimate_pose_failure = False
-        self.flag_go_to_pose_done       = False
-        self.flag_go_to_pose_failed     = False
-        self.flag_push_a_cube_done      = False
-        self.flag_push_a_cube_failure   = False
+        self.flag_go_to_pose_done = False
+        self.flag_go_to_pose_failed = False
+        self.flag_push_a_cube_done = False
+        self.flag_push_a_cube_failure = False
 
         self.nav_retries = 0
 

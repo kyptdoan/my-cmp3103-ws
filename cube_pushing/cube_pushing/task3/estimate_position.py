@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
- 
+
+"""
+A node to estimate the 3D position of a coloured target in map frame using the RGB-D camera.
+The node:
+- makes the robot rotate to search for the target (brown cube and red patch).
+- estimates the 3D position of the target using the depth image and camera intrinsics.
+- transforms the position from camera frame to map frame using TF.
+- saves the estimated position to a JSON file.
+"""
+
+# import libraries
 import rclpy
 from rclpy.node import Node
  
@@ -10,20 +20,36 @@ import cv2
 import numpy as np
 
 from nav2_msgs.action import NavigateToPose
-from geometry_msgs.msg import PoseStamped, Quaternion
+import tf2_geometry_msgs
+from std_msgs.msg import Empty
 from rclpy.action import ActionClient
 
 from tf2_ros import Buffer, TransformListener
 from geometry_msgs.msg import PointStamped
-import tf2_geometry_msgs 
 
+import time
 import json
 
-import math
+COLOURS_RANGES = {
+    'red1': ((0, 180, 100), (10, 255, 255)),
+    'red2': ((170, 180, 100), (180, 255, 255)),
+    'brown': ((5, 100, 50), (25, 255, 200)),
+}
 
-class EstimatePosition(Node):
+class EstimatePositionNode(Node):
     def __init__(self):
-        super().__init__('estimate_position')
+        super().__init__('estimate_position_node')
+
+        self.br = CvBridge()
+
+        # Specify colour parameters
+        self.declare_parameter('brown', True)
+        use_brown = self.get_parameter('brown').get_parameter_value().bool_value
+
+        if use_brown:
+            self.key = 'brown'
+        else:
+            self.key = 'red'  # combine red1 and red2 for full red range
 
         self.pub_cmd_vel = self.create_publisher(Twist, 'cmd_vel', 1)
 
@@ -41,7 +67,35 @@ class EstimatePosition(Node):
             1
         )
 
-        self.br = CvBridge()
+        # Publishes as Empty to state machine when the target position has been estimated and saved
+        self.pub_done = self.create_publisher(
+            Empty,
+            '/estimate_position/success',
+            1,
+        )
+
+        # Publishes as Empty to state machine when the target position estimation has failed
+        self.pub_failed = self.create_publisher(
+            Empty,
+            '/estimate_position/failure',
+            1,
+        )
+
+        # Subscribes to start signal for brown target from state machine
+        self.sub_start_brown = self.create_subscription(
+            Empty,
+            '/estimate_position/start_brown',
+            self.start_brown_callback,
+            1,
+        )
+
+        # Subscribes to start signal for red target from state machine
+        self.sub_start_brown = self.create_subscription(
+            Empty,
+            '/estimate_position/start_red',
+            self.start_red_callback,
+            1,
+        )
  
         # latest frames
         self.depth_image = None
@@ -66,10 +120,46 @@ class EstimatePosition(Node):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
+        # node states
+        self.active = False
+        self.search_start_time = None
+
+    def start_brown_callback(self, msg):
+        self.get_logger().info('Received start signal (brown).')
+        self.key = 'brown'
+        self.active = True
+        self.search_start_time = None
+
+    def start_red_callback(self, msg):
+        self.get_logger().info('Received start signal (red).')
+        self.key = 'red'
+        self.active = True
+        self.search_start_time = None
+
     def depth_callback(self, data):
+
+        # only start when activated by start signal
+        if not self.active:
+            return
+
         self.depth_image = self.br.imgmsg_to_cv2(data, desired_encoding='passthrough')
 
     def color_callback(self, data):
+        # only start when activated by start signal
+        if not self.active:
+            return
+        
+        if self.search_start_time is None:
+            self.search_start_time = time.time()
+            self.get_logger().info('Starting search for target...')
+        elif time.time() - self.search_start_time > 50.0:
+            # stop searching and report as no target found after 50 seconds
+            self.get_logger().warn('Target not found after 50 seconds - publishing failure')
+            self.pub_failed.publish(Empty())
+            self.search_start_time = None  # reset for next time
+            self.active = False
+            return
+
         cv2.namedWindow("Image window", 1)
 
         # Convert ROS Image message to OpenCV image
@@ -78,30 +168,26 @@ class EstimatePosition(Node):
         # Convert image to HSV
         current_frame_hsv = cv2.cvtColor(current_frame, cv2.COLOR_BGR2HSV)
 
-        # red wraps around in HSV — combine both ranges
-        # mask1 = cv2.inRange(current_frame_hsv, (0,   180, 100), (10,  255, 255))
-        # mask2 = cv2.inRange(current_frame_hsv, (170, 180, 100), (180, 255, 255))
-        # red_mask = cv2.bitwise_or(mask1, mask2)
+        # Build mask for the target colour
+        if self.key == 'red':
+            mask1 = cv2.inRange(current_frame_hsv, COLOURS_RANGES['red1'][0], COLOURS_RANGES['red1'][1])
+            mask2 = cv2.inRange(current_frame_hsv, COLOURS_RANGES['red2'][0], COLOURS_RANGES['red2'][1])
+            target_mask = cv2.bitwise_or(mask1, mask2)
+        else:
+            target_mask = cv2.inRange(current_frame_hsv, COLOURS_RANGES['brown'][0], COLOURS_RANGES['brown'][1])
 
-        brown_mask = cv2.inRange(current_frame_hsv,
-                                 (5, 100, 50),
-                                 (25, 255, 200))
-
-        # Find red contour (sorted by area and keep only the biggest one)
-        # red_contours, red_hierarchy = cv2.findContours(red_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        # red_contours = sorted(red_contours, key=cv2.contourArea, reverse=True)[:1]
-
-        brown_contours, brown_hierarchy = cv2.findContours(brown_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        brown_contours = sorted(brown_contours, key=cv2.contourArea)[:1]
+        # Find target contour (keep the biggest one if targeting red, the smallest one if targeting brown)
+        target_contours, target_hierarchy = cv2.findContours(target_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        target_contours = sorted(target_contours, key=cv2.contourArea, reverse=(self.key == 'red'))[:1]
 
         # Twist message to publish
         tw = Twist()
 
-        if len(brown_contours) > 0:
+        if len(target_contours) > 0:
             # debug
-            self.get_logger().info(f'Contour area: {cv2.contourArea(brown_contours[0]):.1f}')
+            self.get_logger().info(f'Contour area: {cv2.contourArea(target_contours[0]):.1f}')
 
-            M = cv2.moments(brown_contours[0])
+            M = cv2.moments(target_contours[0])
             if M['m00'] > 0:
                 cx = int(M['m10'] / M['m00'])
                 cy = int(M['m01'] / M['m00'])
@@ -131,7 +217,7 @@ class EstimatePosition(Node):
                     self.estimate_3d_position(cx, cy)
                 
                 # draw centroid and contour
-                cv2.drawContours(current_frame, brown_contours, -1, (255, 0, 255), 3)
+                cv2.drawContours(current_frame, target_contours, -1, (255, 0, 255), 3)
                 cv2.circle(current_frame, (cx, cy), 5, (0, 255, 0), -1)
         else:
             # no target - rotate to search
@@ -147,6 +233,7 @@ class EstimatePosition(Node):
         cv2.waitKey(1)
 
     def estimate_3d_position(self, cx, cy):
+
         if self.depth_image is None:
             self.get_logger().warn('No depth image yet')
             return
@@ -171,7 +258,7 @@ class EstimatePosition(Node):
         
         Z = float(np.median(valid))
 
-        # back-project 2D -> 3D using pinhole model
+        # back-project 2D into 3D using pinhole model
         X = (cx - self.cx) * Z / self.fx
         Y = (cy - self.cy) * Z / self.fy
 
@@ -187,32 +274,40 @@ class EstimatePosition(Node):
             point_map = self.tf_buffer.transform(point_depth, 'map')
         except Exception as e:
             self.get_logger().warn(f'TF failed: {e}')
+            self.pub_failed.publish(Empty())
+            self.active = False
             return
 
         self.get_logger().info(
-            f'Cube in map frame: x={point_map.point.x:.3f} y={point_map.point.y:.3f}'
+            f'Cube in map frame: x={point_map.point.x:.8f} y={point_map.point.y:.8f} z={point_map.point.z:.8f}'
         )
 
         point_map = self.tf_buffer.transform(point_depth, 'map')
 
         goal = {
-            'x': round(point_map.point.x, 4),
-            'y': round(point_map.point.y, 4),
+            'x': round(point_map.point.x, 8),
+            'y': round(point_map.point.y, 8),
             'z': 0.0,
             # 'w': 1.0
         }
 
-        with open('/workspaces/my-cmp3103-ws/src/cube_pos.json', 'w') as f:
-            json.dump(goal, f)
+        # Write the estimated position to disk for use by other nodes
+        try:
+            with open(f'/tmp/{self.key}_pos.json', 'w') as f:
+                json.dump(goal, f)
+            self.get_logger().info(f'Pos saved: {goal}')
+            self.pub_done.publish(Empty())
+            self.active = False
+        except Exception as e:
+            self.get_logger().error(f'Failed to save position: {e}')
+            self.pub_failed.publish(Empty())
+            self.active = False
 
-        self.get_logger().info(f'Pos saved: {goal}')
-
-        
 def main(args=None):
     print("Starting estimate_position.py")
     cv2.startWindowThread()
     rclpy.init(args=args)
-    node = EstimatePosition()
+    node = EstimatePositionNode()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

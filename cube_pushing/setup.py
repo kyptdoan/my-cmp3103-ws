@@ -25,10 +25,13 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'state_machine = cube_pushing.task1_2.state_machine:main',
+            'state_machine_task_1_2 = cube_pushing.task1_2.state_machine:main',
             'go_to_pose = cube_pushing.task1_2.go_to_pose:main',
             'push_a_cube = cube_pushing.task1_2.push_a_cube:main',
             'estimate_pose = cube_pushing.task1_2.estimate_pose:main',
+            'state_machine_task_3 = cube_pushing.task3.state_machine:main',
+            'estimate_position = cube_pushing.task3.estimate_position:main',
+            'go_to_pre_pushing_pose = cube_pushing.task3.go_to_pre_pushing_pose:main',
             'nav_and_return = cube_pushing.real_robot_task.nav_and_return:main',
         ],
     },

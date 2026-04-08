@@ -81,7 +81,7 @@ def generate_launch_description():
         period=20.0,
         actions=[
             LogInfo(msg='[Task_1] Starting state machine...'),
-            Node(package='cube_pushing', executable='state_machine', name='state_machine_node', output='screen'),
+            Node(package='cube_pushing', executable='state_machine_task_1_2', name='state_machine_node', output='screen'),
         ]
     )
 

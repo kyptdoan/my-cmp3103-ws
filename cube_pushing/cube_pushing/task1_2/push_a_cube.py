@@ -207,7 +207,7 @@ class PushACubeNode(Node):
                 cv2.drawContours(m, [cube], 0, 255, -1)
 
                 # structure element for dilation
-                structured_element = np.ones((3, 3), np.uint8)
+                structured_element = np.ones((5, 5), np.uint8)
 
                 # dilation
                 m_dilated = cv2.dilate(m, structured_element, iterations=1)
