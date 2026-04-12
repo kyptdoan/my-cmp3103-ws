@@ -1,0 +1,11 @@
+# Terminal 1 - LIMO bringup 
+ros2 launch limo_bringup limo_start.launch.py
+
+# Terminal 2 - SLAM
+ros2 launch slam_toolbox online_async_launch.py use_sim_time:=false
+
+# Terminal 3 - Nav2
+ros2 launch nav2_bringup navigation_launch.py use_sim_time:=false params_file:=/workspaces/cmp3103-ws/cube_pushing/config/nav2_params_real_robot.yaml
+
+# Terminal 4 - RViz
+ros2 run rviz2 rviz2 -d /workspaces/cmp3103-ws/cube_pushing/rviz/real_robot.rviz
