@@ -22,7 +22,7 @@ def generate_launch_description():
             os.path.join(get_package_share_directory('slam_toolbox'), 'launch', 'online_async_launch.py')
         ),
         launch_arguments={
-            'use_sim_time': 'true',
+            'use_sim_time': 'false',
             'slam_params_file': os.path.join(get_package_share_directory('cube_pushing'), 'config', 'slam_params.yaml')
         }.items()
     )
@@ -40,7 +40,7 @@ def generate_launch_description():
             os.path.join(get_package_share_directory('nav2_bringup'), 'launch', 'navigation_launch.py')
         ),
         launch_arguments={
-            'use_sim_time': 'true',
+            'use_sim_time': 'false',
             'params_file': nav2_params,
             'autostart': 'true',
         }.items()

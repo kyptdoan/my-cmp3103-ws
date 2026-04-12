@@ -1,5 +1,12 @@
 #!/usr/bin/env python
 
+# go_to_pre_pushing_pose node: computes the pre-pushing pose from the 3D back-projected cube and patch's position,
+# and navigate to that pose.
+# Idle by default - activated by /go_to_pre_pushing_pose/start from state machine
+# Publishes /go_to_pre_pushing_pose/success when the goal is reached.
+
+# Reference: https://api.nav2.org/actions/humble/navigatetopose.html
+
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
@@ -10,9 +17,10 @@ from std_msgs.msg import Empty
 import json
 import math
 
+# path to the positio
 CUBE_FILE     = '/tmp/brown_pos.json'
 PATCH_FILE    = '/tmp/red_pos.json'
-STANDOFF      = 0.05 
+STANDOFF      = 0.05 # behind-cube stand-off distance
 
 class GoToPrePushingPoseNode(Node):
     def __init__(self):
@@ -53,6 +61,7 @@ class GoToPrePushingPoseNode(Node):
         self.get_logger().info('Received start signal, activating GoToPrePushingPose node...')
         self.active = True
 
+        # check if Nav2 is ready
         if not self.nav2_client.wait_for_server(timeout_sec=5.0):
             self.get_logger().error('Nav2 action server not available!')
             self.pub_failed.publish(Empty())
@@ -80,12 +89,14 @@ class GoToPrePushingPoseNode(Node):
         nx = dx / dist
         ny = dy / dist
 
+        # build the pose up in the (x, y, yaw) format
         pre_push = {
             'x':   round(cube['x'] - nx * STANDOFF, 8),
             'y':   round(cube['y'] - ny * STANDOFF, 8),
             'yaw': round(math.atan2(ny, nx), 8),
         }
 
+        # log info
         self.get_logger().info(f'cube:      {cube}')
         self.get_logger().info(f'patch:     {patch}')
         self.get_logger().info(f'nx={nx:.3f} ny={ny:.3f}')
@@ -97,7 +108,7 @@ class GoToPrePushingPoseNode(Node):
         """
         Send a NavigateToPose goal to Nav2 for the computed pre-pushing pose.
         """
-        
+        # stay idle until start signal is received
         if not self.active:
             self.get_logger().warn('Node not active, ignoring start signal.')
             return 

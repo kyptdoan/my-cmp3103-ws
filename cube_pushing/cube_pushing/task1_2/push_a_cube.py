@@ -135,7 +135,13 @@ class PushACubeNode(Node):
         current_frame_hsv = cv2.cvtColor(current_frame, cv2.COLOR_BGR2HSV)
     
         # create masks for red patch and the target coloured cubes
-        red_mask  = cv2.inRange(current_frame_hsv, (0, 100, 50), (10, 255, 255))
+        
+        # end red mask 1 at 9 (instead of 10) & start red_mask_2 at 171 (instead of 170)
+        # to put it away from brown
+        red_mask_1 = cv2.inRange(current_frame_hsv, (0,   150, 150), (9,   255, 255))
+        red_mask_2 = cv2.inRange(current_frame_hsv, (171, 150, 150), (180, 255, 255))
+        red_mask   = cv2.bitwise_or(red_mask_1, red_mask_2)
+
         cube_mask = cv2.inRange(current_frame_hsv, self.cube_lower, self.cube_upper)
 
         # twist message to publish
@@ -207,7 +213,7 @@ class PushACubeNode(Node):
                 cv2.drawContours(m, [cube], 0, 255, -1)
 
                 # structure element for dilation
-                structured_element = np.ones((5, 5), np.uint8)
+                structured_element = np.ones((3, 3), np.uint8)
 
                 # dilation
                 m_dilated = cv2.dilate(m, structured_element, iterations=1)
@@ -235,7 +241,7 @@ class PushACubeNode(Node):
                 self.integral_error_x = 0.0
                 self.last_error_x = 0.0
                 tw.linear.x = 0.0
-                tw.angular.z = 0.3
+                tw.angular.z = 0.2
                 self.pub_cmd_vel.publish(tw)
                 self.get_logger().info('No touching cube found, searching...')
                 

@@ -32,9 +32,9 @@ def generate_launch_description():
     # ------- Nav2 ----------
     # use default nav2 params as the objective of task 1 and 2 does not require precise navigation
     nav2_params = os.path.join(
-        get_package_share_directory('nav2_bringup'),
-        'params',
-        'nav2_params.yaml'
+        get_package_share_directory('cube_pushing'),
+        'config',
+        'nav2_params_task_1_2.yaml'
     )
 
     nav2 = IncludeLaunchDescription(

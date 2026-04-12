@@ -131,7 +131,7 @@ class GoToPoseNode(Node):
         if status == GoalStatus.STATUS_SUCCEEDED:
             self.get_logger().info('Goal reached — publishing done.')
             self.pub_done.publish(Empty())
-        else:
+        elif status == GoalStatus.STATUS_ABORTED or status == GoalStatus.STATUS_CANCELED or status == GoalStatus.STATUS_CANCELING:
             self.get_logger().warn(f'Navigation failed with status: {status}')
             self.pub_failed.publish(Empty())
         
